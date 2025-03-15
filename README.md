@@ -84,6 +84,39 @@ You can modify various parameters in `config.py`, including:
 
 The agent typically achieves a win rate of 45-55% against the rule-based opponent after approximately 5,000 episodes of training. Performance may vary based on random initialization and hyperparameters.
 
+---
+
+## Contributing
+
+Contributions to this project are welcome! Here's how you can help:
+
+- **Bug Reports**: If you find a bug, please open an issue with detailed steps to reproduce.
+- **Feature Requests**: Have ideas for new features? Open an issue to discuss them.
+- **Code Contributions**: 
+  1. Fork the repository
+  2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+  3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+  4. Push to the branch (`git push origin feature/amazing-feature`)
+  5. Open a Pull Request
+
+All contributions, including documentation improvements, code optimization, or new training approaches are appreciated.
+
+### Development Environment Setup
+
+To set up a development environment:
+
+```bash
+# Clone your fork
+git clone https://github.com/your-username/pokerRL.git
+
+# Create a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install development dependencies
+pip install -r requirements.txt
+```
+
 ## Future Improvements
 
 - Multi-player poker support
@@ -92,6 +125,7 @@ The agent typically achieves a win rate of 45-55% against the rule-based opponen
 - Expanded action space (variable bet sizing)
 - Advanced poker features (position awareness, opponent modeling)
 
-## License
+---
+## Credits
 
-[MIT License](LICENSE)
+[Aashish Harishchandre](https://aashishharishchandre.netlify.app/)
