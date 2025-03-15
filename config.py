@@ -1,0 +1,21 @@
+class Config:
+    NUM_PLAYERS = 2
+    INIT_STACK = 1000
+    BIG_BLIND = 20
+    SMALL_BLIND = 10
+    MAX_RAISES_PER_ROUND = 3
+    
+    STATE_DIM = 107 
+    ACTION_DIM = 3
+    HIDDEN_DIM = 128  
+    
+    LR = 0.001
+    EPS_START = 1.0
+    EPS_END = 0.01
+    EPS_DECAY = 0.995
+    GAMMA = 0.99
+    BATCH_SIZE = 64
+    REPLAY_BUFFER_SIZE = 10000
+    
+    EPISODES = 10000
+    TARGET_UPDATE = 10
