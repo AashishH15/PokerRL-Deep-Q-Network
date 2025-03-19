@@ -129,5 +129,6 @@ pip install -r requirements.txt
 
 ---
 ## Credits
-Reach out to me I'd love to talk!
 [Aashish Harishchandre](https://aashishharishchandre.netlify.app/)
+
+Reach out to me I'd love to talk!
