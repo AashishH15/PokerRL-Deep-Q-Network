@@ -101,6 +101,8 @@ Contributions to this project are welcome! Here's how you can help:
 
 All contributions, including documentation improvements, code optimization, or new training approaches are appreciated.
 
+You can also always reach out to me!
+
 ### Development Environment Setup
 
 To set up a development environment:
