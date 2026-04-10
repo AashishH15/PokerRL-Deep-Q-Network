@@ -4,6 +4,7 @@ import torch.optim as optim
 import numpy as np
 import random
 from config import Config
+from utils import calculate_hand_strength
 
 class DQNNetwork(nn.Module):
     def __init__(self, state_dim, action_dim):
@@ -82,6 +83,12 @@ class DQNAgent:
             
         batch, indices, weights = self.prioritized_sample(Config.BATCH_SIZE)
         states, actions, rewards, next_states, dones = zip(*batch)
+        hand_strengths = torch.FloatTensor([
+            self.get_hand_strength(state) for state in states
+        ]).to(self.device)
+        next_hand_strengths = torch.FloatTensor([
+            self.get_hand_strength(state) for state in next_states
+        ]).to(self.device)
         
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.LongTensor(actions).to(self.device)
@@ -89,9 +96,6 @@ class DQNAgent:
         next_states = torch.FloatTensor(next_states).to(self.device)
         dones = torch.FloatTensor(dones).to(self.device)
         weights = torch.FloatTensor(weights).to(self.device)
-        
-        hand_strengths = torch.FloatTensor([self.get_hand_strength(s) for s in states]).to(self.device)
-        next_hand_strengths = torch.FloatTensor([self.get_hand_strength(s) for s in next_states]).to(self.device)
         
         current_q_values = self.policy_net(states, hand_strengths).gather(1, actions.unsqueeze(1))
         
@@ -125,7 +129,19 @@ class DQNAgent:
         self.target_net.load_state_dict(self.policy_net.state_dict())
     
     def get_hand_strength(self, state):
-        return 0.5
+        state_array = np.asarray(state)
+        hole_cards = self._decode_cards(state_array[:52])
+        community_cards = self._decode_cards(state_array[52:104])
+        return calculate_hand_strength(hole_cards, community_cards)
+
+    def _decode_cards(self, encoded_cards):
+        cards = []
+        for idx, value in enumerate(encoded_cards):
+            if value == 1:
+                rank = idx // 4
+                suit = idx % 4
+                cards.append((rank, suit))
+        return cards
 
     def get_memory_for_save(self):
         memory_list = []
