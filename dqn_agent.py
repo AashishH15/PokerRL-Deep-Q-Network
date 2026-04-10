@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from collections import deque
 import random
 from config import Config
 
@@ -75,7 +74,7 @@ class DQNAgent:
 
     def update_priorities(self, indices, td_errors):
         for idx, error in zip(indices, td_errors):
-            self.priorities[idx] = abs(error) + self.eps_prio
+            self.priorities[idx] = float(np.abs(error).item()) + self.eps_prio
 
     def replay(self):
         if len(self.memory) < Config.BATCH_SIZE:
@@ -141,14 +140,21 @@ class DQNAgent:
         return memory_list
 
     def load_memory_from_save(self, memory_list):
-        self.memory = deque(maxlen=Config.REPLAY_BUFFER_SIZE)
+        self.memory = []
         for item in memory_list:
             state = np.array(item['state'])
             next_state = np.array(item['next_state'])
-            self.memory.append((
+            experience = (
                 state,
                 item['action'],
                 item['reward'],
                 next_state,
                 item['done']
-            ))
+            )
+            self.memory.append(experience)
+
+        memory_len = len(self.memory)
+        if memory_len == 0:
+            self.priorities = np.array([])
+        else:
+            self.priorities = np.ones(memory_len, dtype=np.float32)
