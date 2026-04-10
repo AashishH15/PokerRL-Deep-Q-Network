@@ -128,7 +128,5 @@ pip install -r requirements.txt
 - Advanced poker features (position awareness, opponent modeling)
 
 ---
-## Credits
-[Aashish Harishchandre](https://aashishharishchandre.netlify.app/)
-
-Reach out to me I'd love to talk!
+## Credit
+- Aashish Harishchandre
