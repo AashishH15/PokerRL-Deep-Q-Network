@@ -69,10 +69,10 @@ class PokerEnv:
 
     def _decode_state(self, state_array):
         hand = state_array[:52]
-        community = state_array[52:61]
-        pot = state_array[61] * Config.INIT_STACK
-        current_bet = state_array[62] * Config.BIG_BLIND 
-        stack = state_array[63] * Config.INIT_STACK
+        community = state_array[52:104]
+        pot = state_array[104] * Config.INIT_STACK
+        current_bet = state_array[105] * Config.INIT_STACK
+        stack = state_array[106] * Config.INIT_STACK
         
         return {
             'hand': hand,
@@ -106,11 +106,10 @@ class PokerEnv:
     def step(self, action):
         reward = 0
         done = False
-        initial_pot = self.pot
         
         if action == 0:  # Fold
             self.players[0]['active'] = False
-            reward = -self.players[0]['current_bet']
+            reward = -(Config.INIT_STACK - self.players[0]['stack'])
             self.players[1]['stack'] += self.pot
             done = True
         elif action == 1:  # Call
@@ -163,6 +162,7 @@ class PokerEnv:
                     self.players[1]['current_bet'] = new_total_bet
 
         if not done and self._betting_round_complete():
+            player0_total_invested = Config.INIT_STACK - self.players[0]['stack']
             self.current_bet = 0
             for p in self.players:
                 p['current_bet'] = 0
@@ -193,12 +193,13 @@ class PokerEnv:
                     if player_strength > opponent_strength:
                         reward = self.pot
                     elif player_strength < opponent_strength:
-                        reward = -self.players[0]['current_bet']
+                        reward = -player0_total_invested
 
         next_state = self._get_state()
         return next_state, reward, done, {}
 
     def calculate_reward(self):
-        base_reward = self.pot if self.players[0]['active'] else -self.players[0]['total_invested']
+        total_invested = Config.INIT_STACK - self.players[0]['stack']
+        base_reward = self.pot if self.players[0]['active'] else -total_invested
         hand_strength_bonus = self.get_hand_strength(self._get_state()) * 50
         return base_reward + hand_strength_bonus
