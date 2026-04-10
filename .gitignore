@@ -1,0 +1,19 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Training artifacts and checkpoints
+*.pth
+*.npz
+training.log
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
