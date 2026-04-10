@@ -26,15 +26,22 @@ This implementation features a DQN agent that learns poker strategies by playing
 
 ## Installation and Setup
 
-1. Ensure you have the following dependencies installed:
-   - Python 3.7+
-   - PyTorch
-   - NumPy
+1. Use Python 3.10 to 3.12.
 
 2. Clone this repository:
    ```
    git clone <repository-url>
-   cd pokerRL
+   ```
+
+3. Create and activate a virtual environment:
+   ```
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+4. Install dependencies:
+   ```
+   pip install -r requirements.txt
    ```
 
 ## Usage
