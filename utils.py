@@ -40,7 +40,10 @@ def log_metrics(episode, reward, eps, win_rate=None):
     print(f"Episode {episode} | Reward: {reward:.2f}")
 
 def calculate_hand_strength(hole_cards, community_cards):
-    """Calculate hand strength based on hole cards and community cards"""
+    """
+    Calculate normalized hand strength in [0.1, 1.0) based on standard poker rules.
+    Combines hole cards and community cards to find the best 5-card combination.
+    """
     def get_rank_suit(card):
         return card[0], card[1]
 
@@ -54,39 +57,84 @@ def calculate_hand_strength(hole_cards, community_cards):
     rank_count = {r: ranks.count(r) for r in set(ranks)}
     suit_count = {s: suits.count(s) for s in set(suits)}
 
-    # Check for straight flush first (highest value)
-    for suit in suits:
-        suited_ranks = sorted([r for r, s in all_cards if s == suit])
-        if len(suited_ranks) >= 5:
-            for i in range(len(suited_ranks) - 4):
-                if suited_ranks[i+4] - suited_ranks[i] == 4:
-                    return 0.95 + (suited_ranks[i+4] / 100)
+    # Helper to find the highest straight in a set of ranks
+    def find_straight(ranks_set):
+        # Check standard straights from Ace-high down to 6-high
+        for high_rank in range(12, 3, -1):
+            if all(r in ranks_set for r in range(high_rank - 4, high_rank + 1)):
+                return high_rank
+        # Check Ace-low straight (A, 2, 3, 4, 5) -> ranks (12, 0, 1, 2, 3)
+        if 12 in ranks_set and all(r in ranks_set for r in range(4)):
+            return 3  # High card is 5 (rank 3)
+        return None
 
-    # Then check four of a kind
+    # Helper to get base-15 kicker score
+    def get_tie_breaker(tie_ranks):
+        score = 0.0
+        for idx, r in enumerate(tie_ranks):
+            score += r / (15 ** (idx + 1))
+        return score
+
+    # 1. Straight Flush
+    for suit, count in suit_count.items():
+        if count >= 5:
+            suited_ranks = set(r for r, s in all_cards if s == suit)
+            straight_high = find_straight(suited_ranks)
+            if straight_high is not None:
+                return (9.0 + get_tie_breaker([straight_high])) / 10.0
+
+    # 2. Four of a Kind
     if 4 in rank_count.values():
-        quad_rank = max(r for r in rank_count if rank_count[r] == 4)
+        quad_rank = max(r for r, count in rank_count.items() if count == 4)
         kickers = sorted([r for r in ranks if r != quad_rank], reverse=True)
         kicker = kickers[0] if kickers else 0
-        return 0.9 + (quad_rank / 100) + (kicker / 1000)
+        return (8.0 + get_tie_breaker([quad_rank, kicker])) / 10.0
 
-    # Full house
-    if 3 in rank_count.values() and 2 in rank_count.values():
-        triplet = max(r for r in rank_count if rank_count[r] == 3)
-        pair = max(r for r in rank_count if rank_count[r] == 2)
-        return 0.85 + (triplet / 100) + (pair / 1000)
+    # 3. Full House
+    # Needs at least one triplet and one separate pair (or another triplet)
+    triplets = [r for r, count in rank_count.items() if count >= 3]
+    if triplets:
+        triplet_rank = max(triplets)
+        pairs = [r for r, count in rank_count.items() if count >= 2 and r != triplet_rank]
+        if pairs:
+            pair_rank = max(pairs)
+            return (7.0 + get_tie_breaker([triplet_rank, pair_rank])) / 10.0
 
-    # One pair
-    if 2 in rank_count.values():
-        pair = max(r for r in rank_count if rank_count[r] == 2)
-        kickers = sorted([r for r in ranks if r != pair], reverse=True)
-        kicker_score = 0
-        if kickers:
-            kicker_score = kickers[0] / 1000
-        return 0.6 + (pair / 100) + kicker_score
+    # 4. Flush
+    for suit, count in suit_count.items():
+        if count >= 5:
+            suited_ranks = sorted([r for r, s in all_cards if s == suit], reverse=True)
+            return (6.0 + get_tie_breaker(suited_ranks[:5])) / 10.0
 
-    # High card (default case)
+    # 5. Straight
+    straight_high = find_straight(set(ranks))
+    if straight_high is not None:
+        return (5.0 + get_tie_breaker([straight_high])) / 10.0
+
+    # 6. Three of a Kind
+    if triplets:
+        triplet_rank = max(triplets)
+        kickers = sorted([r for r in ranks if r != triplet_rank], reverse=True)
+        return (4.0 + get_tie_breaker([triplet_rank] + kickers[:2])) / 10.0
+
+    # 7. Two Pair
+    pairs = sorted([r for r, count in rank_count.items() if count >= 2], reverse=True)
+    if len(pairs) >= 2:
+        high_pair = pairs[0]
+        low_pair = pairs[1]
+        kickers = sorted([r for r in ranks if r != high_pair and r != low_pair], reverse=True)
+        kicker = kickers[0] if kickers else 0
+        return (3.0 + get_tie_breaker([high_pair, low_pair, kicker])) / 10.0
+
+    # 8. One Pair
+    if len(pairs) == 1:
+        pair_rank = pairs[0]
+        kickers = sorted([r for r in ranks if r != pair_rank], reverse=True)
+        return (2.0 + get_tie_breaker([pair_rank] + kickers[:3])) / 10.0
+
+    # 9. High Card
     sorted_ranks = sorted(ranks, reverse=True)
-    return 0.5 + (sorted_ranks[0] / 100)
+    return (1.0 + get_tie_breaker(sorted_ranks[:5])) / 10.0
 
 def action_mask_to_probs(action_mask):
     probs = np.array(action_mask, dtype=np.float32)

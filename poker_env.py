@@ -107,9 +107,17 @@ class PokerEnv:
         reward = 0
         done = False
         
+        # Validate action and coerce to Check/Call (1) if invalid
+        valid_actions = get_valid_actions(self.current_bet, self.players[0]['stack'])
+        if action not in valid_actions:
+            action = 1  # Coerce to Call/Check if agent tries an illegal move
+            
+        player0_total_invested = Config.INIT_STACK - self.players[0]['stack']
+
         if action == 0:  # Fold
             self.players[0]['active'] = False
-            reward = -(Config.INIT_STACK - self.players[0]['stack'])
+            # Net chip change: we lose what we invested so far
+            reward = -player0_total_invested
             self.players[1]['stack'] += self.pot
             done = True
         elif action == 1:  # Call
@@ -132,9 +140,13 @@ class PokerEnv:
                 self.players[0]['stack'] -= amount_to_add
                 self.players[0]['current_bet'] = new_total_bet
 
+        # Update investment tracker after our action
+        player0_total_invested = Config.INIT_STACK - self.players[0]['stack']
+
         if self.players[0]['stack'] <= 0 or self.players[1]['stack'] <= 0:
             done = True
-            reward = self.pot if self.players[0]['stack'] > 0 else -self.pot
+            # Net chip change: if we have chips left, we won the pot, otherwise we lost all investment
+            reward = (self.pot - player0_total_invested) if self.players[0]['stack'] > 0 else -player0_total_invested
             return self._get_state(), reward, done, {}
 
         if not done and self.players[0]['active']:
@@ -161,8 +173,12 @@ class PokerEnv:
                     self.players[1]['stack'] -= amount_to_add
                     self.players[1]['current_bet'] = new_total_bet
 
+        if self.players[0]['stack'] <= 0 or self.players[1]['stack'] <= 0:
+            done = True
+            reward = (self.pot - player0_total_invested) if self.players[0]['stack'] > 0 else -player0_total_invested
+            return self._get_state(), reward, done, {}
+
         if not done and self._betting_round_complete():
-            player0_total_invested = Config.INIT_STACK - self.players[0]['stack']
             self.current_bet = 0
             for p in self.players:
                 p['current_bet'] = 0
@@ -191,9 +207,14 @@ class PokerEnv:
                         self.community_cards
                     )
                     if player_strength > opponent_strength:
-                        reward = self.pot
+                        reward = self.pot - player0_total_invested
                     elif player_strength < opponent_strength:
                         reward = -player0_total_invested
+                    else:  # Split pot tie
+                        reward = (self.pot / 2.0) - player0_total_invested
+
+        next_state = self._get_state()
+        return next_state, reward, done, {}
 
         next_state = self._get_state()
         return next_state, reward, done, {}
