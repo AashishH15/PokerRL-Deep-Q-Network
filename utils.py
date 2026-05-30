@@ -168,3 +168,40 @@ def decode_cards(encoded_cards):
             cards.append(f"{ranks[rank]}{suits[suit]}")
     
     return cards
+
+def get_opponent_action(hand_strength, current_bet, opponent_stack, opponent_current_bet, pot):
+    amount_to_call = current_bet - opponent_current_bet
+    pot_odds = amount_to_call / (pot + amount_to_call) if (pot + amount_to_call) > 0 else 0
+    
+    can_raise = opponent_stack > amount_to_call + Config.BIG_BLIND
+    
+    if amount_to_call == 0:
+        if hand_strength >= 0.3:
+            if can_raise and np.random.rand() < 0.3:
+                return 2
+        return 1
+
+    if hand_strength >= 0.5:
+        if can_raise and np.random.rand() < 0.4:
+            return 2
+        return 1
+        
+    if hand_strength >= 0.3:
+        if can_raise and np.random.rand() < 0.15:
+            return 2
+        return 1
+        
+    if hand_strength >= 0.2:
+        if pot_odds < 0.15 or amount_to_call <= Config.BIG_BLIND:
+            return 1
+        if np.random.rand() < 0.70:
+            return 1
+        return 0
+        
+    if pot_odds < 0.10 or amount_to_call <= Config.SMALL_BLIND:
+        if np.random.rand() < 0.35:
+            return 1
+        return 0
+    if np.random.rand() < 0.05:
+        return 1
+    return 0

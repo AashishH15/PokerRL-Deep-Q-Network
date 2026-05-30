@@ -1,6 +1,6 @@
 import numpy as np
 from collections import deque
-from utils import encode_cards, get_valid_actions, calculate_hand_strength
+from utils import encode_cards, get_valid_actions, calculate_hand_strength, get_opponent_action
 from config import Config
 import torch
 
@@ -172,19 +172,32 @@ class PokerEnv:
             return self._all_in_showdown()
 
         if not done and self.players[0]['active']:
-            opp_action = np.random.choice([1, 2], p=[0.7, 0.3])
-            if opp_action == 1:  # Call
+            opp_strength = calculate_hand_strength(self.players[1]['hand'], self.community_cards)
+            opp_action = get_opponent_action(
+                opp_strength,
+                self.current_bet,
+                self.players[1]['stack'],
+                self.players[1]['current_bet'],
+                self.pot
+            )
+            
+            if opp_action == 0:
+                self.players[1]['active'] = False
+                reward = self.pot - player0_total_invested
+                self.players[0]['stack'] += self.pot
+                done = True
+            elif opp_action == 1:
                 amount_to_call = self.current_bet - self.players[1]['current_bet']
                 if amount_to_call <= self.players[1]['stack']:
                     self.pot += amount_to_call
                     self.players[1]['stack'] -= amount_to_call
                     self.players[1]['current_bet'] = self.current_bet
-                else:  # All-in call
+                else:
                     self.pot += self.players[1]['stack']
                     self.players[1]['current_bet'] += self.players[1]['stack']
                     self.players[1]['stack'] = 0
                     done = True
-            elif opp_action == 2:  # Raise
+            elif opp_action == 2:
                 raise_amount = min(Config.BIG_BLIND * 2, self.players[1]['stack'])
                 new_total_bet = self.current_bet + raise_amount
                 amount_to_add = new_total_bet - self.players[1]['current_bet']
