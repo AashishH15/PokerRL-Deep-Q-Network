@@ -38,15 +38,25 @@ class DQNAgent:
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=learning_rate)
         self.eps = Config.EPS_START
         
-    def act(self, state, hand_strength):
+    def act(self, state, hand_strength, valid_actions=None):
+        if valid_actions is None:
+            valid_actions = [0, 1, 2]
+
         if np.random.rand() <= self.eps:
-            return random.randrange(self.action_size)
+            return random.choice(valid_actions)
         else:
             with torch.no_grad():
                 state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
                 hand_strength_tensor = torch.FloatTensor([hand_strength]).to(self.device)
                 q_values = self.policy_net(state_tensor, hand_strength_tensor)
-                return q_values.argmax().item()
+                
+                # Create a copy and set the Q-values of invalid actions to -1e9
+                masked_q_values = q_values.clone()
+                for action in range(self.action_size):
+                    if action not in valid_actions:
+                        masked_q_values[0, action] = -1e9
+                
+                return masked_q_values.argmax().item()
     
     def add_experience(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))

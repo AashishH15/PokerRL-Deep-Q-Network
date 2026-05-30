@@ -1,6 +1,6 @@
 from poker_env import PokerEnv
 from dqn_agent import DQNAgent
-from utils import decode_cards, load_model
+from utils import decode_cards, load_model, get_valid_actions
 from config import Config
 import torch
 import time
@@ -49,7 +49,8 @@ def visualize_game():
             print(f"Betting Round: {['Preflop', 'Flop', 'Turn', 'River'][env.betting_round]}")
             
             hand_strength = env.get_hand_strength(state)
-            action = agent1.act(state, hand_strength)
+            valid_actions = get_valid_actions(env.current_bet, env.players[0]['stack'])
+            action = agent1.act(state, hand_strength, valid_actions)
             
             action_names = ['Fold', 'Call/Check', 'Raise']
             current_action = action_names[action]

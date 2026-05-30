@@ -4,7 +4,7 @@ import os
 from config import Config
 from dqn_agent import DQNAgent
 from poker_env import PokerEnv
-from utils import load_model
+from utils import load_model, get_valid_actions
 
 
 def evaluate(num_hands=100, model_path="best_model.pth"):
@@ -29,7 +29,8 @@ def evaluate(num_hands=100, model_path="best_model.pth"):
 
         while not done:
             hand_strength = env.get_hand_strength(state)
-            action = agent.act(state, hand_strength)
+            valid_actions = get_valid_actions(env.current_bet, env.players[0]["stack"])
+            action = agent.act(state, hand_strength, valid_actions)
             next_state, reward, done, _ = env.step(action)
             state = next_state
             hand_reward += reward

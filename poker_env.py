@@ -103,6 +103,31 @@ class PokerEnv:
                 return False
         return True
 
+    def _all_in_showdown(self):
+        # Deal remaining community cards if any
+        needed_community = 5 - len(self.community_cards)
+        if needed_community > 0:
+            self.community_cards.extend(self.deck[:needed_community])
+            self.deck = self.deck[needed_community:]
+            
+        player0_total_invested = Config.INIT_STACK - self.players[0]['stack']
+        
+        player_strength = calculate_hand_strength(self.players[0]['hand'], self.community_cards)
+        opponent_strength = calculate_hand_strength(self.players[1]['hand'], self.community_cards)
+        
+        if player_strength > opponent_strength:
+            reward = self.pot - player0_total_invested
+            self.players[0]['stack'] += self.pot
+        elif player_strength < opponent_strength:
+            reward = -player0_total_invested
+            self.players[1]['stack'] += self.pot
+        else:
+            reward = (self.pot / 2.0) - player0_total_invested
+            self.players[0]['stack'] += self.pot / 2.0
+            self.players[1]['stack'] += self.pot / 2.0
+            
+        return self._get_state(), reward, True, {}
+
     def step(self, action):
         reward = 0
         done = False
@@ -144,10 +169,7 @@ class PokerEnv:
         player0_total_invested = Config.INIT_STACK - self.players[0]['stack']
 
         if self.players[0]['stack'] <= 0 or self.players[1]['stack'] <= 0:
-            done = True
-            # Net chip change: if we have chips left, we won the pot, otherwise we lost all investment
-            reward = (self.pot - player0_total_invested) if self.players[0]['stack'] > 0 else -player0_total_invested
-            return self._get_state(), reward, done, {}
+            return self._all_in_showdown()
 
         if not done and self.players[0]['active']:
             opp_action = np.random.choice([1, 2], p=[0.7, 0.3])
@@ -174,9 +196,7 @@ class PokerEnv:
                     self.players[1]['current_bet'] = new_total_bet
 
         if self.players[0]['stack'] <= 0 or self.players[1]['stack'] <= 0:
-            done = True
-            reward = (self.pot - player0_total_invested) if self.players[0]['stack'] > 0 else -player0_total_invested
-            return self._get_state(), reward, done, {}
+            return self._all_in_showdown()
 
         if not done and self._betting_round_complete():
             self.current_bet = 0
@@ -208,10 +228,14 @@ class PokerEnv:
                     )
                     if player_strength > opponent_strength:
                         reward = self.pot - player0_total_invested
+                        self.players[0]['stack'] += self.pot
                     elif player_strength < opponent_strength:
                         reward = -player0_total_invested
+                        self.players[1]['stack'] += self.pot
                     else:  # Split pot tie
                         reward = (self.pot / 2.0) - player0_total_invested
+                        self.players[0]['stack'] += self.pot / 2.0
+                        self.players[1]['stack'] += self.pot / 2.0
 
         next_state = self._get_state()
         return next_state, reward, done, {}

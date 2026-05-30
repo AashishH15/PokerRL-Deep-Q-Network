@@ -1,7 +1,7 @@
 from poker_env import PokerEnv
 from dqn_agent import DQNAgent
 import torch
-from utils import log_metrics, save_model, load_model
+from utils import log_metrics, save_model, load_model, get_valid_actions
 from config import Config
 import numpy as np
 import os
@@ -78,7 +78,8 @@ def train(resume=False):
         
         while not done:
             hand_strength = env.get_hand_strength(state)
-            action = agent.act(state, hand_strength)
+            valid_actions = get_valid_actions(env.current_bet, env.players[0]['stack'])
+            action = agent.act(state, hand_strength, valid_actions)
             next_state, reward, done, _ = env.step(action)
             
             agent.add_experience(state, action, reward, next_state, done)
