@@ -1,5 +1,5 @@
 class Config:
-    NUM_PLAYERS = 2
+    NUM_PLAYERS = 5
     INIT_STACK = 1000
     BIG_BLIND = 20
     SMALL_BLIND = 10

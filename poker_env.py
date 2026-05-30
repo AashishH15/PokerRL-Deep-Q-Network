@@ -11,29 +11,89 @@ class PokerEnv:
     def __init__(self):
         self.num_players = Config.NUM_PLAYERS
         self.init_stack = Config.INIT_STACK
+        self.button_player = self.num_players - 1
         self.reset()
     
-    def reset(self):
+    def reset(self, player_stacks=None):
         self.deck = self._create_deck()
         self.community_cards = []
+        
+        self.button_player = (self.button_player + 1) % self.num_players
+        
+        if player_stacks is None:
+            stacks = [Config.INIT_STACK] * self.num_players
+        else:
+            stacks = list(player_stacks)
+
+        self.initial_stacks = list(stacks)
+
+        if self.num_players == 2:
+            sb_player = self.button_player
+            bb_player = 1 - self.button_player
+        else:
+            sb_player = (self.button_player + 1) % self.num_players
+            bb_player = (self.button_player + 2) % self.num_players
+        
+        stacks[sb_player] -= Config.SMALL_BLIND
+        stacks[bb_player] -= Config.BIG_BLIND
+        
+        self.players = []
+        for i in range(self.num_players):
+            bet = 0
+            if i == sb_player:
+                bet = Config.SMALL_BLIND
+            elif i == bb_player:
+                bet = Config.BIG_BLIND
+                
+            self.players.append({
+                'stack': stacks[i],
+                'hand': [],
+                'active': True,
+                'current_bet': bet
+            })
+        
         self.pot = Config.SMALL_BLIND + Config.BIG_BLIND
         self.current_bet = Config.BIG_BLIND
-        self.players = [
-            {
-                'stack': Config.INIT_STACK - Config.BIG_BLIND,
-                'hand': [],
-                'active': True,
-                'current_bet': Config.BIG_BLIND
-            },
-            {
-                'stack': Config.INIT_STACK - Config.SMALL_BLIND,
-                'hand': [],
-                'active': True,
-                'current_bet': Config.SMALL_BLIND
-            }
-        ]
         self.betting_round = 0
+        self.raise_count = 0
+        self.players_acted_this_round = set()
+        
+        if self.num_players == 2:
+            self.active_player = self.button_player
+        else:
+            self.active_player = (self.button_player + 3) % self.num_players
+        
+        self.done = False
+        self.reward = 0
+        
         self._deal_hands()
+        
+        while self.active_player != 0:
+            active_idx = self.active_player
+            opp_strength = calculate_hand_strength(self.players[active_idx]['hand'], self.community_cards)
+            opp_valid = get_valid_actions(self.current_bet, self.players[active_idx]['stack'], self.players[active_idx]['current_bet'])
+            opp_action = get_opponent_action(
+                opp_strength,
+                self.current_bet,
+                self.players[active_idx]['stack'],
+                self.players[active_idx]['current_bet'],
+                self.pot
+            )
+            if opp_action not in opp_valid:
+                opp_action = 1
+            self._apply_action(active_idx, opp_action)
+            
+            if self._is_hand_done():
+                self.done = True
+                active_count = sum(1 for p in self.players if p['active'])
+                if active_count <= 1:
+                    self.reward = self._handle_fold()
+                else:
+                    self.reward = self._run_showdown(is_all_in=True)
+                break
+                
+            self._advance_turn()
+            
         return self._get_state()
 
     def _create_deck(self):
@@ -97,167 +157,182 @@ class PokerEnv:
                 cards.append((rank, suit))
         return cards
 
-    def _betting_round_complete(self):
-        for player in self.players:
-            if player['active'] and player['current_bet'] != self.current_bet:
-                return False
-        return True
+    def _next_active_player(self, from_idx):
+        idx = (from_idx + 1) % self.num_players
+        while not self.players[idx]['active']:
+            idx = (idx + 1) % self.num_players
+        return idx
 
-    def _all_in_showdown(self):
-        # Deal remaining community cards if any
-        needed_community = 5 - len(self.community_cards)
-        if needed_community > 0:
-            self.community_cards.extend(self.deck[:needed_community])
-            self.deck = self.deck[needed_community:]
+    def _apply_action(self, player_idx, action):
+        valid_actions = get_valid_actions(
+            self.current_bet, 
+            self.players[player_idx]['stack'], 
+            self.players[player_idx]['current_bet']
+        )
+        if action not in valid_actions:
+            action = 1
             
-        player0_total_invested = Config.INIT_STACK - self.players[0]['stack']
+        if action == 0:
+            self.players[player_idx]['active'] = False
+        elif action == 1:
+            amount_to_call = self.current_bet - self.players[player_idx]['current_bet']
+            if amount_to_call > 0:
+                amount_to_call = min(amount_to_call, self.players[player_idx]['stack'])
+                self.pot += amount_to_call
+                self.players[player_idx]['stack'] -= amount_to_call
+                self.players[player_idx]['current_bet'] += amount_to_call
+            self.players_acted_this_round.add(player_idx)
+        elif action == 2:
+            raise_amount = min(Config.BIG_BLIND * 2, self.players[player_idx]['stack'])
+            new_total_bet = self.current_bet + raise_amount
+            amount_to_add = new_total_bet - self.players[player_idx]['current_bet']
+            self.pot += amount_to_add
+            self.players[player_idx]['stack'] -= amount_to_add
+            self.players[player_idx]['current_bet'] = new_total_bet
+            self.current_bet = new_total_bet
+            self.raise_count += 1
+            self.players_acted_this_round = {player_idx}
+
+    def _is_hand_done(self):
+        active_count = sum(1 for p in self.players if p['active'])
+        if active_count <= 1:
+            return True
+        if any(p['stack'] <= 0 for p in self.players if p['active']):
+            return True
+        return False
+
+    def _run_showdown(self, is_all_in=False):
+        if is_all_in:
+            needed_community = 5 - len(self.community_cards)
+            if needed_community > 0:
+                self.community_cards.extend(self.deck[:needed_community])
+                self.deck = self.deck[needed_community:]
+                
+        player0_total_invested = self.initial_stacks[0] - self.players[0]['stack']
         
-        player_strength = calculate_hand_strength(self.players[0]['hand'], self.community_cards)
-        opponent_strength = calculate_hand_strength(self.players[1]['hand'], self.community_cards)
+        strengths = {}
+        for idx, p in enumerate(self.players):
+            if p['active']:
+                strengths[idx] = calculate_hand_strength(p['hand'], self.community_cards)
+                
+        max_strength = max(strengths.values())
+        winners = [idx for idx, strength in strengths.items() if strength == max_strength]
         
-        if player_strength > opponent_strength:
-            reward = self.pot - player0_total_invested
-            self.players[0]['stack'] += self.pot
-        elif player_strength < opponent_strength:
-            reward = -player0_total_invested
-            self.players[1]['stack'] += self.pot
+        split_pot = self.pot / len(winners)
+        for w in winners:
+            self.players[w]['stack'] += split_pot
+            
+        if 0 in winners:
+            reward = split_pot - player0_total_invested
         else:
-            reward = (self.pot / 2.0) - player0_total_invested
-            self.players[0]['stack'] += self.pot / 2.0
-            self.players[1]['stack'] += self.pot / 2.0
+            reward = -player0_total_invested
             
-        return self._get_state(), reward, True, {}
+        return reward
+
+    def _handle_fold(self):
+        player0_total_invested = self.initial_stacks[0] - self.players[0]['stack']
+        
+        winner_idx = [idx for idx, p in enumerate(self.players) if p['active']][0]
+        self.players[winner_idx]['stack'] += self.pot
+        
+        if winner_idx == 0:
+            reward = self.pot - player0_total_invested
+        else:
+            reward = -player0_total_invested
+            
+        return reward
+
+    def _advance_turn(self):
+        active_indices = [i for i, p in enumerate(self.players) if p['active']]
+        
+        if all(i in self.players_acted_this_round for i in active_indices) and \
+           all(self.players[i]['current_bet'] == self.current_bet for i in active_indices):
+           
+            if self.betting_round == 3:
+                return True
+            
+            self.betting_round += 1
+            self.current_bet = 0
+            self.raise_count = 0
+            self.players_acted_this_round = set()
+            for p in self.players:
+                p['current_bet'] = 0
+            
+            if self.betting_round == 1:
+                self.community_cards.extend(self.deck[:3])
+                self.deck = self.deck[3:]
+            elif self.betting_round == 2:
+                self.community_cards.append(self.deck[0])
+                self.deck = self.deck[1:]
+            elif self.betting_round == 3:
+                self.community_cards.append(self.deck[0])
+                self.deck = self.deck[1:]
+            
+            self.active_player = self._next_active_player(self.button_player)
+        else:
+            self.active_player = self._next_active_player(self.active_player)
+            
+        return False
 
     def step(self, action):
-        reward = 0
-        done = False
+        if self.done:
+            return self._get_state(0), self.reward, True, {}
+
+        self._apply_action(0, action)
         
-        # Validate action and coerce to Check/Call (1) if invalid
-        valid_actions = get_valid_actions(self.current_bet, self.players[0]['stack'])
-        if action not in valid_actions:
-            action = 1  # Coerce to Call/Check if agent tries an illegal move
+        if self._is_hand_done():
+            self.done = True
+            active_count = sum(1 for p in self.players if p['active'])
+            if active_count <= 1:
+                self.reward = self._handle_fold()
+            else:
+                self.reward = self._run_showdown(is_all_in=True)
+            return self._get_state(0), self.reward, True, {}
             
-        player0_total_invested = Config.INIT_STACK - self.players[0]['stack']
-
-        if action == 0:  # Fold
-            self.players[0]['active'] = False
-            # Net chip change: we lose what we invested so far
-            reward = -player0_total_invested
-            self.players[1]['stack'] += self.pot
-            done = True
-        elif action == 1:  # Call
-            amount_to_call = self.current_bet - self.players[0]['current_bet']
-            if amount_to_call > 0 and amount_to_call <= self.players[0]['stack']:
-                self.pot += amount_to_call
-                self.players[0]['stack'] -= amount_to_call
-                self.players[0]['current_bet'] = self.current_bet
-        elif action == 2:  # Raise
-            raise_amount = min(
-                Config.BIG_BLIND * 2,
-                self.players[0]['stack'] 
-            )
-            new_total_bet = self.current_bet + raise_amount
-            amount_to_add = new_total_bet - self.players[0]['current_bet']
+        showdown_needed = self._advance_turn()
+        if showdown_needed:
+            self.done = True
+            self.reward = self._run_showdown()
+            return self._get_state(0), self.reward, True, {}
             
-            if amount_to_add <= self.players[0]['stack']:
-                self.current_bet = new_total_bet
-                self.pot += amount_to_add
-                self.players[0]['stack'] -= amount_to_add
-                self.players[0]['current_bet'] = new_total_bet
-
-        # Update investment tracker after our action
-        player0_total_invested = Config.INIT_STACK - self.players[0]['stack']
-
-        if self.players[0]['stack'] <= 0 or self.players[1]['stack'] <= 0:
-            return self._all_in_showdown()
-
-        if not done and self.players[0]['active']:
-            opp_strength = calculate_hand_strength(self.players[1]['hand'], self.community_cards)
+        while self.active_player != 0:
+            active_idx = self.active_player
+            opp_strength = calculate_hand_strength(self.players[active_idx]['hand'], self.community_cards)
+            opp_valid = get_valid_actions(self.current_bet, self.players[active_idx]['stack'], self.players[active_idx]['current_bet'])
+            
             opp_action = get_opponent_action(
                 opp_strength,
                 self.current_bet,
-                self.players[1]['stack'],
-                self.players[1]['current_bet'],
+                self.players[active_idx]['stack'],
+                self.players[active_idx]['current_bet'],
                 self.pot
             )
-            
-            if opp_action == 0:
-                self.players[1]['active'] = False
-                reward = self.pot - player0_total_invested
-                self.players[0]['stack'] += self.pot
-                done = True
-            elif opp_action == 1:
-                amount_to_call = self.current_bet - self.players[1]['current_bet']
-                if amount_to_call <= self.players[1]['stack']:
-                    self.pot += amount_to_call
-                    self.players[1]['stack'] -= amount_to_call
-                    self.players[1]['current_bet'] = self.current_bet
-                else:
-                    self.pot += self.players[1]['stack']
-                    self.players[1]['current_bet'] += self.players[1]['stack']
-                    self.players[1]['stack'] = 0
-                    done = True
-            elif opp_action == 2:
-                raise_amount = min(Config.BIG_BLIND * 2, self.players[1]['stack'])
-                new_total_bet = self.current_bet + raise_amount
-                amount_to_add = new_total_bet - self.players[1]['current_bet']
+            if opp_action not in opp_valid:
+                opp_action = 1
                 
-                if amount_to_add <= self.players[1]['stack']:
-                    self.current_bet = new_total_bet
-                    self.pot += amount_to_add
-                    self.players[1]['stack'] -= amount_to_add
-                    self.players[1]['current_bet'] = new_total_bet
-
-        if self.players[0]['stack'] <= 0 or self.players[1]['stack'] <= 0:
-            return self._all_in_showdown()
-
-        if not done and self._betting_round_complete():
-            self.current_bet = 0
-            for p in self.players:
-                p['current_bet'] = 0
-
-            if self.betting_round == 0:  # Pre-flop -> Flop
-                self.community_cards.extend(self.deck[:3])
-                self.deck = self.deck[3:]
-                self.betting_round = 1
-            elif self.betting_round == 1:  # Flop -> Turn
-                self.community_cards.append(self.deck[0])
-                self.deck = self.deck[1:]
-                self.betting_round = 2
-            elif self.betting_round == 2:  # Turn -> River
-                self.community_cards.append(self.deck[0])
-                self.deck = self.deck[1:]
-                self.betting_round = 3
-            elif self.betting_round == 3:  # River -> Showdown
-                done = True
-                if self.players[0]['active']:
-                    player_strength = calculate_hand_strength(
-                        self.players[0]['hand'],
-                        self.community_cards
-                    )
-                    opponent_strength = calculate_hand_strength(
-                        self.players[1]['hand'],
-                        self.community_cards
-                    )
-                    if player_strength > opponent_strength:
-                        reward = self.pot - player0_total_invested
-                        self.players[0]['stack'] += self.pot
-                    elif player_strength < opponent_strength:
-                        reward = -player0_total_invested
-                        self.players[1]['stack'] += self.pot
-                    else:  # Split pot tie
-                        reward = (self.pot / 2.0) - player0_total_invested
-                        self.players[0]['stack'] += self.pot / 2.0
-                        self.players[1]['stack'] += self.pot / 2.0
-
-        next_state = self._get_state()
-        return next_state, reward, done, {}
-
-        next_state = self._get_state()
-        return next_state, reward, done, {}
+            self._apply_action(active_idx, opp_action)
+            
+            if self._is_hand_done():
+                self.done = True
+                active_count = sum(1 for p in self.players if p['active'])
+                if active_count <= 1:
+                    self.reward = self._handle_fold()
+                else:
+                    self.reward = self._run_showdown(is_all_in=True)
+                return self._get_state(0), self.reward, True, {}
+                
+            showdown_needed = self._advance_turn()
+            if showdown_needed:
+                self.done = True
+                self.reward = self._run_showdown()
+                return self._get_state(0), self.reward, True, {}
+                
+        player0_total_invested = self.initial_stacks[0] - self.players[0]['stack']
+        self.reward = -player0_total_invested
+        return self._get_state(0), self.reward, False, {}
 
     def calculate_reward(self):
-        total_invested = Config.INIT_STACK - self.players[0]['stack']
-        base_reward = self.pot if self.players[0]['active'] else -total_invested
+        player0_total_invested = self.initial_stacks[0] - self.players[0]['stack']
+        base_reward = self.pot if self.players[0]['active'] else -player0_total_invested
         hand_strength_bonus = self.get_hand_strength(self._get_state()) * 50
         return base_reward + hand_strength_bonus

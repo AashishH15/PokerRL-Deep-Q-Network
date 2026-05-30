@@ -22,84 +22,99 @@ def visualize_game():
     hand_number = 1
     hand_history = []
     MAX_HANDS = 10
+    current_stacks = [Config.INIT_STACK] * env.num_players
     
-    while hand_number <= MAX_HANDS and env.players[0]['stack'] > 0 and env.players[1]['stack'] > 0:
+    while hand_number <= MAX_HANDS and all(stack >= Config.BIG_BLIND for stack in current_stacks):
         print(f"\n=== Starting Hand #{hand_number}/{MAX_HANDS} ===")
-        state = env.reset()
+        state = env.reset(player_stacks=current_stacks)
         done = False
         hand_actions = []
-        initial_stacks = [env.players[0]['stack'], env.players[1]['stack']]
+        initial_stacks = list(current_stacks)
         
         while not done:
             os.system('cls' if os.name == 'nt' else 'clear')
             
             print(f"\n=== Poker Hand #{hand_number} ===")
-            print("\nPlayer 1 (Agent)")
-            print(f"Hand: {decode_cards(env.players[0]['hand'])}")
-            print(f"Total Stack: {env.players[0]['stack']}")
-            print(f"Current Bet: {env.players[0]['current_bet']}")
-            
-            print("\nPlayer 2 (Opponent)")
-            print(f"Hand: {decode_cards(env.players[1]['hand'])}")
-            print(f"Total Stack: {env.players[1]['stack']}")
-            print(f"Current Bet: {env.players[1]['current_bet']}")
+            for i in range(env.num_players):
+                p_btn = " [BTN]" if env.button_player == i else ""
+                p_label = "Agent" if i == 0 else f"Opponent {chr(64 + i)}"
+                folded_str = " (Folded)" if not env.players[i]['active'] else ""
+                
+                print(f"\nPlayer {i + 1} ({p_label}){p_btn}{folded_str}")
+                if env.players[i]['active']:
+                    print(f"Hand: {decode_cards(env.players[i]['hand'])}")
+                else:
+                    print("Hand: [folded]")
+                print(f"Total Stack: {env.players[i]['stack']}")
+                print(f"Current Bet: {env.players[i]['current_bet']}")
             
             print(f"\nPot: {env.pot}")
             print(f"Community Cards: {decode_cards(env.community_cards)}")
             print(f"Betting Round: {['Preflop', 'Flop', 'Turn', 'River'][env.betting_round]}")
             
-            hand_strength = env.get_hand_strength(state)
-            valid_actions = get_valid_actions(env.current_bet, env.players[0]['stack'])
-            action = agent1.act(state, hand_strength, valid_actions)
-            
-            action_names = ['Fold', 'Call/Check', 'Raise']
-            current_action = action_names[action]
-            hand_actions.append(f"Player 1: {current_action}")
-            print(f"\nPlayer 1 action: {current_action}")
-            
-            next_state, reward, done, _ = env.step(action)
-            state = next_state
+            if env.players[0]['active']:
+                hand_strength = env.get_hand_strength(state)
+                valid_actions = get_valid_actions(env.current_bet, env.players[0]['stack'], env.players[0]['current_bet'])
+                action = agent1.act(state, hand_strength, valid_actions)
+                
+                action_names = ['Fold', 'Call/Check', 'Raise']
+                current_action = action_names[action]
+                hand_actions.append(f"Player 1: {current_action}")
+                print(f"\nPlayer 1 action: {current_action}")
+                
+                next_state, reward, done, _ = env.step(action)
+                state = next_state
+            else:
+                done = True
             
             time.sleep(1)
         
-        final_stacks = [env.players[0]['stack'], env.players[1]['stack']]
+        final_stacks = [env.players[i]['stack'] for i in range(env.num_players)]
         hand_result = {
             'hand_number': hand_number,
-            'player1_hand': decode_cards(env.players[0]['hand']),
-            'player2_hand': decode_cards(env.players[1]['hand']),
             'community_cards': decode_cards(env.community_cards),
             'pot': env.pot,
             'actions': hand_actions,
-            'winner': 'Player 1' if reward > 0 else 'Player 2',
-            'player1_stack_change': final_stacks[0] - initial_stacks[0],
-            'player2_stack_change': final_stacks[1] - initial_stacks[1]
+            'winner': 'Player 1' if reward > 0 else 'Opponents' if reward < 0 else 'Split Pot',
+            'player_hands': [decode_cards(env.players[i]['hand']) for i in range(env.num_players)],
+            'player_stack_changes': [final_stacks[i] - initial_stacks[i] for i in range(env.num_players)]
         }
         hand_history.append(hand_result)
+        current_stacks = final_stacks
         hand_number += 1
 
     print("\n=== POKER GAME HISTORY ===")
-    total_p1_profit = 0
-    total_p2_profit = 0
+    total_profits = [0] * env.num_players
     
     for hand in hand_history:
         print(f"\nHand #{hand['hand_number']}:")
-        print(f"Player 1: {hand['player1_hand']}")
-        print(f"Player 2: {hand['player2_hand']}")
+        for i in range(env.num_players):
+            p_label = "Player 1 (Agent)" if i == 0 else f"Player {i + 1} (Opponent {chr(64 + i)})"
+            print(f"{p_label}: {hand['player_hands'][i]}")
         print(f"Community: {hand['community_cards']}")
         print(f"Pot: ${hand['pot']}")
         print(f"Winner: {hand['winner']}")
-        print(f"Stack Changes: P1: ${hand['player1_stack_change']:+}, P2: ${hand['player2_stack_change']:+}")
+        
+        stack_changes_str = ", ".join(f"P{i+1}: ${hand['player_stack_changes'][i]:+}" for i in range(env.num_players))
+        print(f"Stack Changes: {stack_changes_str}")
         print("Actions:")
         for action in hand['actions']:
             print(f"  {action}")
-        total_p1_profit += hand['player1_stack_change']
-        total_p2_profit += hand['player2_stack_change']
+        for i in range(env.num_players):
+            total_profits[i] += hand['player_stack_changes'][i]
     
     print("\n=== FINAL RESULTS ===")
     print(f"Total Hands Played: {len(hand_history)}")
-    print(f"Player 1 Final Stack: ${env.players[0]['stack']} (${total_p1_profit:+})")
-    print(f"Player 2 Final Stack: ${env.players[1]['stack']} (${total_p2_profit:+})")
-    print(f"Overall Winner: {'Player 1' if total_p1_profit > 0 else 'Player 2'}")
+    for i in range(env.num_players):
+        p_label = "Player 1 (Agent)" if i == 0 else f"Player {i + 1} (Opponent {chr(64 + i)})"
+        print(f"{p_label} Final Stack: ${current_stacks[i]} (${total_profits[i]:+})")
+        
+    for i in range(env.num_players):
+        if current_stacks[i] < Config.BIG_BLIND:
+            p_label = "Player 1" if i == 0 else f"Player {i + 1}"
+            print(f"{p_label} went bankrupt!")
+            
+    print(f"Overall Winner: {'Player 1' if total_profits[0] > 0 else 'Opponents' if total_profits[0] < 0 else 'Split Pot'}")
 
 if __name__ == "__main__":
     visualize_game()

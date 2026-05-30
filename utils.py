@@ -17,13 +17,15 @@ def encode_cards(cards, max_cards=52):
         encoded[idx] = 1.0
     return encoded
 
-def get_valid_actions(current_bet, player_stack, min_raise=Config.BIG_BLIND):
+def get_valid_actions(current_bet, player_stack, player_current_bet=0, min_raise=Config.BIG_BLIND):
     """
     Return mask for allowed actions in fixed-limit poker:
     0=Fold, 1=Check/Call, 2=Bet/Raise
     """
     valid_actions = [0, 1]  # Fold and Check/Call always allowed
-    can_raise = (player_stack >= current_bet + min_raise and 
+    amount_to_call = current_bet - player_current_bet
+    cost_to_raise = amount_to_call + min_raise
+    can_raise = (player_stack >= cost_to_raise and 
                  current_bet < Config.MAX_RAISES_PER_ROUND * Config.BIG_BLIND)
     if can_raise:
         valid_actions.append(2)
