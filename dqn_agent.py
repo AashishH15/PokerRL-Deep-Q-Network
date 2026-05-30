@@ -19,14 +19,62 @@ class DQNNetwork(nn.Module):
         x = torch.relu(self.fc2(x))
         return self.fc3(x)
 
+class SumTree:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.tree = np.zeros(2 * capacity - 1)
+        self.data = [None] * capacity
+        self.write = 0
+        self.n_entries = 0
+
+    def __len__(self):
+        return self.n_entries
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    @property
+    def total_priority(self):
+        return self.tree[0]
+
+    def update(self, tree_idx, priority):
+        change = priority - self.tree[tree_idx]
+        self.tree[tree_idx] = priority
+        while tree_idx != 0:
+            tree_idx = (tree_idx - 1) // 2
+            self.tree[tree_idx] += change
+
+    def add(self, priority, data):
+        tree_idx = self.write + self.capacity - 1
+        self.data[self.write] = data
+        self.update(tree_idx, priority)
+        self.write = (self.write + 1) % self.capacity
+        if self.n_entries < self.capacity:
+            self.n_entries += 1
+
+    def get_leaf(self, v):
+        parent_idx = 0
+        while True:
+            left_idx = 2 * parent_idx + 1
+            right_idx = left_idx + 1
+            if left_idx >= len(self.tree):
+                leaf_idx = parent_idx
+                break
+            if v <= self.tree[left_idx]:
+                parent_idx = left_idx
+            else:
+                v -= self.tree[left_idx]
+                parent_idx = right_idx
+        data_idx = leaf_idx - self.capacity + 1
+        return leaf_idx, self.tree[leaf_idx], self.data[data_idx]
+
 class DQNAgent:
     def __init__(self, state_size, action_size, learning_rate=0.001):
         self.state_size = state_size
         self.action_size = action_size
         self.learning_rate = learning_rate
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.memory = []
-        self.priorities = np.array([])
+        self.memory = SumTree(Config.REPLAY_BUFFER_SIZE)
         self.alpha = 0.6
         self.beta = 0.4 
         self.eps_prio = 1e-6 
@@ -50,7 +98,6 @@ class DQNAgent:
                 hand_strength_tensor = torch.FloatTensor([hand_strength]).to(self.device)
                 q_values = self.policy_net(state_tensor, hand_strength_tensor)
                 
-                # Create a copy and set the Q-values of invalid actions to -1e9
                 masked_q_values = q_values.clone()
                 for action in range(self.action_size):
                     if action not in valid_actions:
@@ -59,36 +106,42 @@ class DQNAgent:
                 return masked_q_values.argmax().item()
     
     def add_experience(self, state, hand_strength, action, reward, next_state, next_hand_strength, done):
-        self.memory.append((state, hand_strength, action, reward, next_state, next_hand_strength, done))
-        max_prio = max(self.priorities, default=1.0)
-        self.priorities = np.append(self.priorities, max_prio)
-
-        if len(self.memory) > Config.REPLAY_BUFFER_SIZE:
-            self.memory.pop(0)
-            self.priorities = np.delete(self.priorities, 0)
+        max_prio = np.max(self.memory.tree[Config.REPLAY_BUFFER_SIZE - 1 : Config.REPLAY_BUFFER_SIZE - 1 + self.memory.n_entries]) if self.memory.n_entries > 0 else 1.0
+        experience = (state, hand_strength, action, reward, next_state, next_hand_strength, done)
+        self.memory.add(max_prio, experience)
 
     def prioritized_sample(self, batch_size):
-        if len(self.memory) < batch_size:
+        if self.memory.n_entries < batch_size:
             return [], [], []
 
-        probs = self.priorities ** self.alpha
-        probs = probs / probs.sum()
+        batch = []
+        indices = []
+        priorities = []
+        segment = self.memory.total_priority / batch_size
 
-        indices = np.random.choice(len(self.memory), batch_size, p=probs)
-        
-        samples = [self.memory[idx] for idx in indices]
-        
-        weights = (len(self.memory) * probs[indices]) ** (-self.beta)
+        for i in range(batch_size):
+            a = segment * i
+            b = segment * (i + 1)
+            v = np.random.uniform(a, b)
+            idx, p, data = self.memory.get_leaf(v)
+            priorities.append(p)
+            indices.append(idx)
+            batch.append(data)
+
+        sampling_probabilities = np.array(priorities) / self.memory.total_priority
+        weights = (self.memory.n_entries * sampling_probabilities) ** (-self.beta)
         weights = weights / weights.max()
 
-        return samples, indices, weights
+        return batch, indices, weights
 
     def update_priorities(self, indices, td_errors):
         for idx, error in zip(indices, td_errors):
-            self.priorities[idx] = float(np.abs(error).item()) + self.eps_prio
+            priority = float(np.abs(error).item()) + self.eps_prio
+            priority = priority ** self.alpha
+            self.memory.update(idx, priority)
 
     def replay(self):
-        if len(self.memory) < Config.BATCH_SIZE:
+        if self.memory.n_entries < Config.BATCH_SIZE:
             return
             
         batch, indices, weights = self.prioritized_sample(Config.BATCH_SIZE)
@@ -152,20 +205,26 @@ class DQNAgent:
 
     def get_memory_for_save(self):
         memory_list = []
-        for state, hand_strength, action, reward, next_state, next_hand_strength, done in self.memory:
-            memory_list.append({
-                'state': state.tolist() if isinstance(state, np.ndarray) else state,
-                'hand_strength': hand_strength,
-                'action': action,
-                'reward': reward,
-                'next_state': next_state.tolist() if isinstance(next_state, np.ndarray) else next_state,
-                'next_hand_strength': next_hand_strength,
-                'done': done
-            })
+        for i in range(self.memory.n_entries):
+            idx = i + Config.REPLAY_BUFFER_SIZE - 1
+            priority = self.memory.tree[idx]
+            data = self.memory.data[i]
+            if data is not None:
+                state, hand_strength, action, reward, next_state, next_hand_strength, done = data
+                memory_list.append({
+                    'state': state.tolist() if isinstance(state, np.ndarray) else state,
+                    'hand_strength': hand_strength,
+                    'action': action,
+                    'reward': reward,
+                    'next_state': next_state.tolist() if isinstance(next_state, np.ndarray) else next_state,
+                    'next_hand_strength': next_hand_strength,
+                    'done': done,
+                    'priority': float(priority)
+                })
         return memory_list
 
     def load_memory_from_save(self, memory_list):
-        self.memory = []
+        self.memory = SumTree(Config.REPLAY_BUFFER_SIZE)
         for item in memory_list:
             state = np.array(item['state'])
             next_state = np.array(item['next_state'])
@@ -180,7 +239,8 @@ class DQNAgent:
                 next_hand_strength,
                 item['done']
             )
-            self.memory.append(experience)
+            priority = item.get('priority', 1.0)
+            self.memory.add(priority, experience)
 
         memory_len = len(self.memory)
         if memory_len == 0:
