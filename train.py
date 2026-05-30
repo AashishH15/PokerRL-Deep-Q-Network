@@ -82,7 +82,8 @@ def train(resume=False):
             action = agent.act(state, hand_strength, valid_actions)
             next_state, reward, done, _ = env.step(action)
             
-            agent.add_experience(state, action, reward, next_state, done)
+            next_hand_strength = env.get_hand_strength(next_state)
+            agent.add_experience(state, hand_strength, action, reward, next_state, next_hand_strength, done)
             
             state = next_state
             episode_reward += reward

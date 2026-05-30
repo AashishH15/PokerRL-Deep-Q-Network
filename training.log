@@ -3731,3 +3731,14 @@ INFO:root:Episode 9970 | Avg Reward: 128.20 | Epsilon: 0.010 | Win Rate: 20.00%
 INFO:root:Episode 9980 | Avg Reward: 141.40 | Epsilon: 0.010 | Win Rate: 23.00%
 INFO:root:Episode 9990 | Avg Reward: 141.40 | Epsilon: 0.010 | Win Rate: 22.00%
 INFO:root:
+INFO:root:
+INFO:root:
+INFO:root:Episode 20 | Avg Reward: -44.76 | Epsilon: 0.990 | Win Rate: 4.76%
+INFO:root:Episode 30 | Avg Reward: -48.39 | Epsilon: 0.980 | Win Rate: 3.23%
+INFO:root:Episode 40 | Avg Reward: -50.24 | Epsilon: 0.970 | Win Rate: 2.44%
+INFO:root:Episode 50 | Avg Reward: -46.67 | Epsilon: 0.961 | Win Rate: 1.96%
+INFO:root:Episode 60 | Avg Reward: -48.85 | Epsilon: 0.951 | Win Rate: 1.64%
+INFO:root:Episode 70 | Avg Reward: -51.55 | Epsilon: 0.942 | Win Rate: 2.82%
+INFO:root:Episode 80 | Avg Reward: -53.09 | Epsilon: 0.932 | Win Rate: 2.47%
+INFO:root:Episode 90 | Avg Reward: -49.01 | Epsilon: 0.923 | Win Rate: 3.30%
+INFO:root:Episode 100 | Avg Reward: -48.80 | Epsilon: 0.914 | Win Rate: 4.00%

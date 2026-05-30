@@ -58,8 +58,8 @@ class DQNAgent:
                 
                 return masked_q_values.argmax().item()
     
-    def add_experience(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
+    def add_experience(self, state, hand_strength, action, reward, next_state, next_hand_strength, done):
+        self.memory.append((state, hand_strength, action, reward, next_state, next_hand_strength, done))
         max_prio = max(self.priorities, default=1.0)
         self.priorities = np.append(self.priorities, max_prio)
 
@@ -155,12 +155,14 @@ class DQNAgent:
 
     def get_memory_for_save(self):
         memory_list = []
-        for state, action, reward, next_state, done in self.memory:
+        for state, hand_strength, action, reward, next_state, next_hand_strength, done in self.memory:
             memory_list.append({
                 'state': state.tolist() if isinstance(state, np.ndarray) else state,
+                'hand_strength': hand_strength,
                 'action': action,
                 'reward': reward,
                 'next_state': next_state.tolist() if isinstance(next_state, np.ndarray) else next_state,
+                'next_hand_strength': next_hand_strength,
                 'done': done
             })
         return memory_list
@@ -170,11 +172,15 @@ class DQNAgent:
         for item in memory_list:
             state = np.array(item['state'])
             next_state = np.array(item['next_state'])
+            hand_strength = item.get('hand_strength', self.get_hand_strength(state))
+            next_hand_strength = item.get('next_hand_strength', self.get_hand_strength(next_state))
             experience = (
                 state,
+                hand_strength,
                 item['action'],
                 item['reward'],
                 next_state,
+                next_hand_strength,
                 item['done']
             )
             self.memory.append(experience)
