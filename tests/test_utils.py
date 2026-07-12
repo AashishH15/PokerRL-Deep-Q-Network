@@ -41,6 +41,17 @@ class TestHandStrength(unittest.TestCase):
         high_card = calculate_hand_strength([(12, 0), (8, 2)], [])
         self.assertGreater(pair, high_card)
 
+    def test_flush_beats_straight(self):
+        flush = calculate_hand_strength(
+            [(10, 0), (8, 0)],
+            [(6, 0), (4, 0), (2, 0)],
+        )
+        straight = calculate_hand_strength(
+            [(12, 1), (11, 2)],
+            [(10, 3), (9, 0), (8, 1)],
+        )
+        self.assertGreater(flush, straight)
+
 
 if __name__ == "__main__":
     unittest.main()
