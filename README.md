@@ -30,7 +30,8 @@ This implementation features a DQN agent that learns poker strategies by playing
 
 2. Clone this repository:
    ```
-   git clone <repository-url>
+   git clone https://github.com/AashishH15/PokerRL-Deep-Q-Network.git
+   cd PokerRL-Deep-Q-Network
    ```
 
 3. Create and activate a virtual environment:
@@ -62,6 +63,16 @@ python train.py --resume
 
 Training progress is logged to `training.log` and models are periodically saved to disk.
 
+### Evaluating the Agent
+
+To measure win rate and stack delta over many hands (no visualization):
+
+```
+python evaluate.py --hands 100 --model best_model.pth
+```
+
+`evaluate.py` runs the agent greedily (`epsilon=0`) and prints wins, losses, ties, and average reward.
+
 ### Visualizing Gameplay
 
 To watch the trained agent play:
@@ -71,6 +82,12 @@ python visualize_game.py
 ```
 
 This will use the best saved model to play a series of poker hands, displaying each action and decision.
+
+### Running Tests
+
+```
+python -m unittest discover -s tests -v
+```
 
 ## Model Architecture
 

@@ -13,6 +13,10 @@ env/
 *.pth
 *.npz
 training.log
+training_data.npz
+checkpoint.npz
+checkpoint_model.pth
+best_model.pth
 
 # OS/editor files
 .DS_Store
