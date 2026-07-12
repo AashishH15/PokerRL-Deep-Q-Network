@@ -45,6 +45,9 @@ This implementation features a DQN agent that learns poker strategies by playing
    pip install -r requirements.txt
    ```
 
+> **Note:** Trained model checkpoints (`*.pth`, `*.npz`) and `training.log` are not
+> stored in this repo. Run `python train.py` to generate them locally.
+
 ## Usage
 
 ### Training the Agent
